@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StoryCanvas - Editor de Histórias</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Barra Lateral (Personagens e Blocos) */
+        aside {
+            width: 320px;
+            background-color: #1e293b;
+            border-right: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        h2 { font-size: 1.2rem; color: #38bdf8; margin-bottom: 5px; }
+        .section-box {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: #0f172a;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            background-color: #1e293b;
+            color: #f8fafc;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+        input:focus, select:focus, textarea:focus { border-color: #38bdf8; }
+
+        button {
+            background-color: #38bdf8;
+            color: #0f172a;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #0ea5e9; }
+
+        .list-container {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .item-card {
+            background: #1e293b;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #38bdf8;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .item-card:hover { background: #334155; }
+        .item-card.lore { border-left-color: #a855f7; }
+        .item-card.cena { border-left-color: #22c55e; }
+        .item-card.dialogo { border-left-color: #eab308; }
+
+        .delete-btn {
+            background: transparent;
+            color: #ef4444;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0 4px;
+        }
+        .delete-btn:hover { color: #dc2626; background: transparent; }
+
+        /* Área Principal de Escrita (Canvas) */
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            background-color: #0f172a;
+            gap: 15px;
+        }
+
+        .editor-header {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        #item-title {
+            font-size: 1.2rem;
+            flex: 1;
+        }
+
+        #item-type {
+            width: 150px;
+        }
+
+        #editor-text {
+            flex: 1;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 20px;
+            font-size: 1rem;
+            resize: none;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- BARRA LATERAL -->
+    aside>
+        <h2>📚 StoryCanvas</h2>
+        
+        <!-- Criar Novo Elemento -->
+        <div class="section-box">
+            <span style="font-size: 0.85rem; color: #94a3b8;">Adicionar Novo Bloco</span>
+            <input type="text" id="new-title" placeholder="Nome (Ex: Aragorn, Cena 1...)">
+            <select id="new-category">
+                <option value="personagem">👤 Personagem</option>
+                <option value="lore">📜 Lore / Mundo</option>
+                <option value="cena">🎬 Cena / Roteiro</option>
+                <option value="dialogo">💬 Diálogo</option>
+            </select>
+            <button onclick="addItem()">Criar Bloco</button>
+        </div>
+
+        <!-- Lista de Blocos Salvos -->
+        <div class="list-container" id="items-list">
+            <!-- Os cards entram aqui via JavaScript -->
+        </div>
+    </aside>
+
+    <!-- ÁREA DE EDIÇÃO PRINCIPAL -->
+    <main>
+        <div class="editor-header">
+            <input type="text" id="item-title" placeholder="Título do Bloco" oninput="saveCurrentEdit()">
+            <select id="item-type" onchange="saveCurrentEdit()">
+                <option value="personagem">Personagem</option>
+                <option value="lore">Lore</option>
+                <option value="cena">Cena</option>
+                <option value="dialogo">Diálogo</option>
+            </select>
+            <span id="save-status" style="font-size: 0.8rem; color: #94a3b8; white-space: nowrap;">Salvo</span>
+        </div>
+
+        <textarea id="editor-text" placeholder="Selecione um bloco na barra lateral ou crie um novo para começar a escrever sua história..." oninput="saveCurrentEdit()"></textarea>
+    </main>
+
+    <script>
+        let items = JSON.parse(localStorage.getItem('story_canvas_items')) || [];
+        let currentId = null;
+
+        function saveToStorage() {
+            localStorage.setItem('story_canvas_items', JSON.stringify(items));
+        }
+
+        function renderList() {
+            const listContainer = document.getElementById('items-list');
+            listContainer.innerHTML = '';
+
+            if (items.length === 0) {
+                listContainer.innerHTML = '<span style="color: #64748b; font-size: 0.85rem; text-align: center; margin-top: 20px;">Nenhum bloco criado ainda.</span>';
+                return;
+            }
+
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = `item-card ${item.type}`;
+                if (item.id === currentId) card.style.borderColor = '#38bdf8';
+                card.style.background = item.id === currentId ? '#334155' : '#1e293b';
+
+                card.innerHTML = `
+                    <span onclick="selectItem(${item.id})" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        ${item.title || 'Sem título'} <span style="font-size: 0.75rem; color: #94a3b8;">(${item.type})</span>
+                    </span>
+                    <button class="delete-btn" onclick="deleteItem(event, ${item.id})">×</button>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+
+        function addItem() {
+            const titleInput = document.getElementById('new-title');
+            const typeInput = document.getElementById('new-category');
+            
+            const newItem = {
+                id: Date.now(),
+                title: titleInput.value.trim() || 'Novo Bloco',
+                type: typeInput.value,
+                text: ''
+            };
+
+            items.push(newItem);
+            titleInput.value = '';
+            saveToStorage();
+            renderList();
+            selectItem(newItem.id);
+        }
+
+        function selectItem(id) {
+            currentId = id;
+            const item = items.find(i => i.id === id);
+            if (!item) return;
+
+            document.getElementById('item-title').value = item.title;
+            document.getElementById('item-type').value = item.type;
+            document.getElementById('editor-text').value = item.text;
+            renderList();
+        }
+
+        function saveCurrentEdit() {
+            if (!currentId) return;
+            const item = items.find(i => i.id === currentId);
+            if (!item) return;
+
+            item.title = document.getElementById('item-title').value;
+            item.type = document.getElementById('item-type').value;
+            item.text = document.getElementById('editor-text').value;
+
+            saveToStorage();
+            renderList();
+
+            const status = document.getElementById('save-status');
+            status.textContent = 'Salvando...';
+            setTimeout(() => { status.textContent = 'Salvo'; }, 800);
+        }
+
+        function deleteItem(event, id) {
+            event.stopPropagation();
+            if (confirm('Tem certeza que deseja apagar este bloco?')) {
+                items = items.filter(i => i.id !== id);
+                saveToStorage();
+                if (currentId === id) {
+                    currentId = null;
+                    document.getElementById('item-title').value = '';
+                    document.getElementById('editor-text').value = '';
+                }
+                renderList();
+            }
+        }
+
+        // Inicializar
+        if (items.length > 0) {
+            selectItem(items[0].id);
+        } else {
+            renderList();
+        }
+    </script>
+</body>
+</html>
